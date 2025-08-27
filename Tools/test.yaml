@@ -1,0 +1,15 @@
+version: 'demo'
+
+batch_size: 50
+epochs: 10
+parameter_save_path: 'deep_registration/parameters/deep_registration'
+check_point: False
+
+model:
+  lr: 0.001
+  backbone: "resnet18"
+  in_channels: 4
+  out_dim: 8
+  drop_rate: 0.2
+
+
