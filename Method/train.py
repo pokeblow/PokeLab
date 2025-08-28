@@ -2,8 +2,8 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
-from Tools.poke.poke_train import BaseTrainModule, PokeTrainer
-from Tools.poke.poke_log import PokeLog
+from Library.poke.poke_train import BaseTrainModule, PokeTrainer
+from Library.poke.poke_log import PokeLog
 import random
 
 # ---- 一个极简的随机分类数据集（3类，20维特征） ----
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     valid_set = RandomClsDataset(n=300,  seed=1)
 
     # 构造模块并给定（或直接从文件加载）配置
-    module = SimpleClassifierModule(config_path='config/test.yaml')
+    module = SimpleClassifierModule(config_path='config/demo.yaml')
 
     # 训练器
     trainer = PokeTrainer(train_module=module, train_dataset=train_set, valid_dataset=valid_set)

@@ -113,7 +113,7 @@ class PokeTrainer:
         if os.path.exists(self.log_root):
             shutil.rmtree(self.log_root)
         os.makedirs(self.log_root, exist_ok=True)
-        log_file = os.path.join(self.log_root, "training_summary.log")
+        log_file = os.path.join(self.log_root, "summary.log")
 
         with open(log_file, 'w'):
             pass
