@@ -2,8 +2,8 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
-from poke.poke_train import BaseTrainModule, PokeTrainer
-from poke.poke_log import PokeLog
+from Tools.poke.poke_train import BaseTrainModule, PokeTrainer
+from Tools.poke.poke_log import PokeLog
 import random
 
 # ---- 一个极简的随机分类数据集（3类，20维特征） ----
@@ -41,10 +41,10 @@ class SimpleClassifierModule(BaseTrainModule):
 
     # 可选：显式注册要记录的日志（也可以不重写，由返回的 metrics 自动创建）
     def configure_logs(self):
-        self.loss_log = PokeLog(log_name="loss", log_type="loss")
-        self.loss_log_val = PokeLog(log_name="loss_val", log_type="loss")
-        self.acc_log = PokeLog(log_name="acc", log_type="acc")
-        self.acc_log_val = PokeLog(log_name="acc_val", log_type="acc")
+        self.loss_log = PokeLog(log_name="loss", log_type="loss", log_location='train')
+        self.loss_log_val = PokeLog(log_name="loss_val", log_type="loss", log_location='train')
+        self.acc_log = PokeLog(log_name="acc", log_type="acc", log_location='valid')
+        self.acc_log_val = PokeLog(log_name="acc_val", log_type="acc", log_location='valid')
         return self.loss_log, self.loss_log_val, self.acc_log, self.acc_log_val
 
     # 必须：实现单步训练逻辑，返回一个 dict 的指标
@@ -84,12 +84,9 @@ class SimpleClassifierModule(BaseTrainModule):
         self.loss_log_val.set_step(loss.item())
         self.acc_log_val.set_step(acc)
 
-
-    # 可选：模型保存流程（这里做个最简演示）
     def configure_parameters_save(self):
-        # 你可以在 commit_epoch 之后检查验证集指标并保存最优权重
-        # 这里仅做占位，不做实际保存。
-        pass
+        self.set_parameters_save(model=self.net, indicator=self.loss_log,
+                                 save_path='{}/net_{}.pth'.format(self.config['parameter_save_root'], self.config['version']))
 
 
 if __name__ == "__main__":
@@ -102,7 +99,7 @@ if __name__ == "__main__":
     valid_set = RandomClsDataset(n=300,  seed=1)
 
     # 构造模块并给定（或直接从文件加载）配置
-    module = SimpleClassifierModule(config_path='/Users/wanghaolin/GitHub/PokeLab/Tools/test.yaml')
+    module = SimpleClassifierModule(config_path='config/test.yaml')
 
     # 训练器
     trainer = PokeTrainer(train_module=module, train_dataset=train_set, valid_dataset=valid_set)

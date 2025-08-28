@@ -6,6 +6,12 @@ import yaml
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from tabulate import tabulate
+from datetime import datetime
+import shutil
+import logging
+import platform
+from pathlib import Path
 
 # 如为同目录文件，请确保正确导入
 from .poke_log import PokeLog  # <-- 在 poke_train 中使用 poke_log
@@ -31,6 +37,8 @@ class BaseTrainModule:
 
         self.logs = self._init_default_logs()
 
+        self.parameter_save_config = []
+
     # --------- 日志相关 ----------
     def _init_default_logs(self) -> None:
         if not isinstance(self.configure_logs(), tuple):
@@ -48,7 +56,6 @@ class BaseTrainModule:
     def configure_logs(self):
         """
         用户可重写，返回需要跟踪的日志集合。
-        参考 _init_default_logs() 的文档字符串。
         """
         return None
 
@@ -58,6 +65,25 @@ class BaseTrainModule:
         在本实现中仅提供占位。
         """
         pass
+
+    def set_parameters_save(self, model, indicator, save_path):
+        self.parameter_save_config.append({
+            'model': model,
+            'indicator': indicator, # PokeLog class
+            'save_path': save_path,
+        })
+
+    def set_scheduler(self):
+        pass
+
+
+    def save_parameters(self):
+        for item in self.parameter_save_config:
+            if item['indicator'].best_epoch_means == item['indicator'].current_epoch_means:
+                if isinstance(item['model'], torch.nn.DataParallel):
+                    torch.save(item['model'].module.state_dict(), item['save_path'])
+                else:
+                    torch.save(item['model'].state_dict(), item['save_path'])
 
 
 # ========== 训练器 ==========
@@ -77,6 +103,28 @@ class PokeTrainer:
 
         self.train_loader: Optional[DataLoader] = None
         self.valid_loader: Optional[DataLoader] = None
+
+
+        time = datetime.now()
+        DATE_TIME = time.strftime('%Y%m%d%H')
+        INSTALLATION_INFO = platform.machine() + '_' + platform.system()
+
+        self.log_root = 'logs/{}_{}'.format(DATE_TIME, INSTALLATION_INFO)
+        if os.path.exists(self.log_root):
+            shutil.rmtree(self.log_root)
+        os.makedirs(self.log_root, exist_ok=True)
+        log_file = os.path.join(self.log_root, "training_summary.log")
+
+        with open(log_file, 'w'):
+            pass
+
+        file_handler = logging.FileHandler(log_file)
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+
+        self.logger = logging.getLogger('Logger')
+        self.logger.addHandler(file_handler)
+        self.logger.setLevel(logging.INFO)
 
     # --------- DataLoader ----------
     def _build_loaders(self) -> None:
@@ -125,6 +173,15 @@ class PokeTrainer:
         device = self.train_module.device  # 与模块保持一致
 
         # ---------------- Train ----------------
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_str = (f"[{now}] version={self.version} | epochs={self.epochs} | "
+                   f"batch_size={self.batch_size} | train_batches={len(self.train_loader)} | "
+                   f"valid_batches={len(self.valid_loader)}")
+        print(log_str)
+
+        self.logger.info(log_str)
+
         for epoch in range(self.epochs):
             self.train_module.train() if hasattr(self.train_module, "train") else None
 
@@ -149,9 +206,14 @@ class PokeTrainer:
 
                     self.train_module.valid_step(idx, batch)
 
+            log_str = f'Epoch {epoch+1}/{self.epochs}: '
             for item in self.train_module.logs:
                 item.commit_epoch()
-                print(item.export())
+                log_str += item.last_epoch_summary(log=True)
 
-        for item in self.train_module.logs:
-            item.plot_epoch_means()
+            self.train_module.save_parameters()
+            self.train_module.set_scheduler()
+            print(log_str)
+
+            self.logger.info(log_str)
+

@@ -15,13 +15,17 @@ class PokeLog:
         * plot_current_epoch(): 画当前 epoch 内的逐步变化
     """
     log_name: str = ""
-    log_type: str = ""
+    log_type: str = "" # include loss, lr, acc, iou, image
+    log_location: str = ""
 
     # 历史：按 epoch 存储聚合结果
     epoch_means: List[float] = field(default_factory=list)
     epoch_stds:  List[float] = field(default_factory=list)
     epoch_mins:  List[float] = field(default_factory=list)
     epoch_maxs:  List[float] = field(default_factory=list)
+
+    best_epoch_means: float = float('inf')
+    current_epoch_means: float = float('inf')
 
     # 临时：当前 epoch 的逐步值
     _buffer: List[float] = field(default_factory=list)
@@ -45,7 +49,12 @@ class PokeLog:
             self.epoch_maxs.append(np.nan)
         else:
             arr = np.asarray(self._buffer, dtype=float)
-            self.epoch_means.append(float(np.mean(arr)))
+
+            self.current_epoch_means = float(np.mean(arr))
+            if self.current_epoch_means < self.best_epoch_means:
+                self.best_epoch_means = self.current_epoch_means
+
+            self.epoch_means.append(self.current_epoch_means)
             self.epoch_stds.append(float(np.std(arr, ddof=0)))
             self.epoch_mins.append(float(np.min(arr)))
             self.epoch_maxs.append(float(np.max(arr)))
@@ -61,17 +70,25 @@ class PokeLog:
             return float("nan")
         return float(np.mean(self._buffer))
 
-    def last_epoch_summary(self) -> Optional[Dict[str, float]]:
+    def last_epoch_summary(self, log=False) -> Optional[Dict[str, float]]:
         """返回最近一个 epoch 的统计信息。若不存在则返回 None。"""
         if len(self.epoch_means) == 0:
             return None
         i = -1
-        return dict(
-            mean=self.epoch_means[i],
-            std=self.epoch_stds[i],
-            min=self.epoch_mins[i],
-            max=self.epoch_maxs[i],
-        )
+
+        if log:
+            return f"{self.log_name} • {self.log_location} = {self.epoch_means[i]:.4f}, "
+
+        else:
+            return dict(
+                log_name=self.log_name,
+                log_type=self.log_type,
+                log_location=self.log_location,
+                mean=self.epoch_means[i],
+                std=self.epoch_stds[i],
+                min=self.epoch_mins[i],
+                max=self.epoch_maxs[i],
+            )
 
     def export(self) -> Dict[str, Any]:
         """导出为字典，便于 JSON 或持久化。"""
@@ -109,6 +126,8 @@ class PokeLog:
             f"Log Name: {self.log_name}, Log Type: {self.log_type}\n"
             f"Current Epoch: {self.current_epoch}, Current Step: {self.current_step}\n"
             f"Current Buffer Mean: {cur_mean}"
+            f'Current Epoch Mean: {self.current_epoch_means}'
+            f'Best Epoch Mean: {self.best_epoch_means}'
         )
 
 

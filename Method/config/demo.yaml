@@ -2,7 +2,7 @@ version: 'demo'
 
 batch_size: 50
 epochs: 10
-parameter_save_path: 'deep_registration/parameters/deep_registration'
+parameter_save_root: 'parameters'
 check_point: False
 
 model:

@@ -1,0 +1,11 @@
+2025-08-28 17:32:11,816 - INFO - [2025-08-28 17:32:11] version=demo | epochs=10 | batch_size=50 | train_batches=24 | valid_batches=6
+2025-08-28 17:32:11,842 - INFO - Epoch 1/10: loss • train = 1.1164, loss_val • train = 1.1114, acc • valid = 0.3075, acc_val • valid = 0.3100, 
+2025-08-28 17:32:11,849 - INFO - Epoch 2/10: loss • train = 1.1008, loss_val • train = 1.1100, acc • valid = 0.3358, acc_val • valid = 0.3200, 
+2025-08-28 17:32:11,941 - INFO - Epoch 3/10: loss • train = 1.0931, loss_val • train = 1.1093, acc • valid = 0.3483, acc_val • valid = 0.3300, 
+2025-08-28 17:32:11,982 - INFO - Epoch 4/10: loss • train = 1.0857, loss_val • train = 1.1100, acc • valid = 0.3817, acc_val • valid = 0.3300, 
+2025-08-28 17:32:12,012 - INFO - Epoch 5/10: loss • train = 1.0803, loss_val • train = 1.1116, acc • valid = 0.4017, acc_val • valid = 0.3467, 
+2025-08-28 17:32:12,030 - INFO - Epoch 6/10: loss • train = 1.0757, loss_val • train = 1.1164, acc • valid = 0.4125, acc_val • valid = 0.3733, 
+2025-08-28 17:32:12,041 - INFO - Epoch 7/10: loss • train = 1.0702, loss_val • train = 1.1154, acc • valid = 0.4183, acc_val • valid = 0.3900, 
+2025-08-28 17:32:12,051 - INFO - Epoch 8/10: loss • train = 1.0656, loss_val • train = 1.1159, acc • valid = 0.4375, acc_val • valid = 0.3967, 
+2025-08-28 17:32:12,069 - INFO - Epoch 9/10: loss • train = 1.0611, loss_val • train = 1.1174, acc • valid = 0.4375, acc_val • valid = 0.3867, 
+2025-08-28 17:32:12,080 - INFO - Epoch 10/10: loss • train = 1.0570, loss_val • train = 1.1212, acc • valid = 0.4467, acc_val • valid = 0.3933, 
