@@ -4,12 +4,13 @@ batch_size: 50
 epochs: 10
 parameter_save_root: 'parameters'
 check_point: False
+seed: 42
 
 model:
   lr: 0.001
   backbone: "resnet18"
-  in_channels: 4
-  out_dim: 8
+  in_channels: 20
+  out_channels: 3
   drop_rate: 0.2
 
 

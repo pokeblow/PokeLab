@@ -12,9 +12,7 @@ import shutil
 import logging
 import platform
 from pathlib import Path
-
-# 如为同目录文件，请确保正确导入
-from .poke_log import PokeLog  # <-- 在 poke_train 中使用 poke_log
+from .utils import set_seed
 
 
 # ========== 基础训练模块 ==========
@@ -155,6 +153,10 @@ class PokeTrainer:
             raise ValueError("train_module 未提供。")
 
         cfg = self.train_module.config or {}
+
+        self.seed = cfg.get('seed', None)
+
+        set_seed(self.seed)
 
         self.version = cfg.get("version", self.version)
         self.check_point = cfg.get("check_point", self.check_point)
