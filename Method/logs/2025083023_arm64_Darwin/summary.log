@@ -1,0 +1,11 @@
+2025-08-30 23:08:19,013 - INFO - [2025-08-30 23:08:19] version=demo | epochs=10 | batch_size=50 | train_batches=24 | valid_batches=6
+2025-08-30 23:08:19,523 - INFO - Epoch 1/10: lr • all = 0.0010, loss • train = 1.1142, loss • valid = 1.1003, acc • train = 0.3450, acc • valid = 0.3367, 
+2025-08-30 23:08:19,793 - INFO - Epoch 2/10: lr • all = 0.0010, loss • train = 1.0976, loss • valid = 1.1030, acc • train = 0.3708, acc • valid = 0.3333, 
+2025-08-30 23:08:19,955 - INFO - Epoch 3/10: lr • all = 0.0005, loss • train = 1.0912, loss • valid = 1.1015, acc • train = 0.4008, acc • valid = 0.3400, 
+2025-08-30 23:08:20,121 - INFO - Epoch 4/10: lr • all = 0.0005, loss • train = 1.0880, loss • valid = 1.1018, acc • train = 0.4008, acc • valid = 0.3400, 
+2025-08-30 23:08:20,282 - INFO - Epoch 5/10: lr • all = 0.0003, loss • train = 1.0850, loss • valid = 1.1020, acc • train = 0.4167, acc • valid = 0.3333, 
+2025-08-30 23:08:20,443 - INFO - Epoch 6/10: lr • all = 0.0003, loss • train = 1.0839, loss • valid = 1.1017, acc • train = 0.4183, acc • valid = 0.3367, 
+2025-08-30 23:08:20,609 - INFO - Epoch 7/10: lr • all = 0.0001, loss • train = 1.0826, loss • valid = 1.1019, acc • train = 0.4175, acc • valid = 0.3400, 
+2025-08-30 23:08:20,770 - INFO - Epoch 8/10: lr • all = 0.0001, loss • train = 1.0819, loss • valid = 1.1019, acc • train = 0.4200, acc • valid = 0.3367, 
+2025-08-30 23:08:20,927 - INFO - Epoch 9/10: lr • all = 0.0001, loss • train = 1.0812, loss • valid = 1.1020, acc • train = 0.4217, acc • valid = 0.3367, 
+2025-08-30 23:08:21,086 - INFO - Epoch 10/10: lr • all = 0.0001, loss • train = 1.0810, loss • valid = 1.1021, acc • train = 0.4217, acc • valid = 0.3367, 

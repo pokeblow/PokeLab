@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator, FormatStrFormatter
+from . import globals as G
 
 __all__ = ["plot_training_log"]
 
@@ -71,7 +72,7 @@ def _collect_metrics(lines: List[str]):
     return metrics
 
 def plot_training_log(
-    log_path: str,
+    log_path: str = '',
     out_dir: Optional[str] = None,
     figsize: Tuple[float, float] = (9.5, 6.2),
     dpi: int = 180,
@@ -111,6 +112,10 @@ def plot_training_log(
     Dict[str, str]
         Mapping from metric name to PNG path.
     """
+    if log_path == '':
+        print(G.get_log_root())
+        log_path = G.get_log_root()
+
     if not os.path.isfile(log_path):
         raise FileNotFoundError(f"Log file not found: {log_path}")
     lines = _read_lines(log_path)
@@ -119,11 +124,6 @@ def plot_training_log(
         raise ValueError("No 'Epoch k/N' lines found in log.")
     total_epochs_header, version = _parse_header(lines)
     metrics = _collect_metrics(lines)
-    if out_dir is None:
-        base = os.path.basename(log_path)
-        stem = os.path.splitext(base)[0]
-        out_dir = os.path.join(os.path.dirname(log_path) or ".", f"figs_{stem}")
-    os.makedirs(out_dir, exist_ok=True)
 
     title_suffix = []
     if version:

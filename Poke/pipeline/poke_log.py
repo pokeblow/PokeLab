@@ -28,7 +28,7 @@ class PokeLog:
     current_epoch_means: float = float('inf')
 
     # 临时：当前 epoch 的逐步值
-    _buffer: List[float] = field(default_factory=list)
+    _buffer:  List[float] = field(default_factory=list)
 
     current_step: int = 0
     current_epoch: int = 0
@@ -36,28 +36,35 @@ class PokeLog:
     # ====== 记录相关 ======
     def set_step(self, value: float) -> None:
         """记录一个 step 的数值。"""
-        self._buffer.append(float(value))
+        if self.log_type != "image":
+            self._buffer.append(float(value))
+        else:
+            self._buffer.append(value)
         self.current_step += 1
+
+    def get_buffer_image(self):
+        return self._buffer
 
     def commit_epoch(self) -> None:
         """将当前 epoch 的 step 值聚合并入历史，并清空缓冲。"""
-        if len(self._buffer) == 0:
-            # 空 epoch 时也推进计数，但写入 NaN，避免误用
-            self.epoch_means.append(np.nan)
-            self.epoch_stds.append(np.nan)
-            self.epoch_mins.append(np.nan)
-            self.epoch_maxs.append(np.nan)
-        else:
-            arr = np.asarray(self._buffer, dtype=float)
+        if self.log_type != "image":
+            if len(self._buffer) == 0:
+                # 空 epoch 时也推进计数，但写入 NaN，避免误用
+                self.epoch_means.append(np.nan)
+                self.epoch_stds.append(np.nan)
+                self.epoch_mins.append(np.nan)
+                self.epoch_maxs.append(np.nan)
+            else:
+                arr = np.asarray(self._buffer, dtype=float)
 
-            self.current_epoch_means = float(np.mean(arr))
-            if self.current_epoch_means < self.best_epoch_means:
-                self.best_epoch_means = self.current_epoch_means
+                self.current_epoch_means = float(np.mean(arr))
+                if self.current_epoch_means < self.best_epoch_means:
+                    self.best_epoch_means = self.current_epoch_means
 
-            self.epoch_means.append(self.current_epoch_means)
-            self.epoch_stds.append(float(np.std(arr, ddof=0)))
-            self.epoch_mins.append(float(np.min(arr)))
-            self.epoch_maxs.append(float(np.max(arr)))
+                self.epoch_means.append(self.current_epoch_means)
+                self.epoch_stds.append(float(np.std(arr, ddof=0)))
+                self.epoch_mins.append(float(np.min(arr)))
+                self.epoch_maxs.append(float(np.max(arr)))
 
         self.current_epoch += 1
         self.current_step = 0

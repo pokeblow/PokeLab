@@ -6,6 +6,7 @@ from Poke.pipeline.poke_trainer import BaseTrainModule, PokeTrainer
 from Poke.pipeline.poke_log import PokeLog
 from model.model_demo import DemoNet
 from dataset import RandomClsDataset
+from visualization import visualization
 
 
 # ---- 继承与重写 BaseTrainModule ----
@@ -22,13 +23,18 @@ class SimpleClassifierModule(BaseTrainModule):
 
     def set_scheduler(self):
         self.scheduler.step()
+
+    def visualization(self, image_box):
+        return visualization(image_box)
+
     def configure_logs(self):
         self.lr_log = PokeLog(log_name="lr", log_type="lr", log_location='all')
         self.loss_log = PokeLog(log_name="loss", log_type="loss", log_location='train')
         self.loss_log_val = PokeLog(log_name="loss", log_type="loss", log_location='valid')
         self.acc_log = PokeLog(log_name="acc", log_type="acc", log_location='train')
         self.acc_log_val = PokeLog(log_name="acc", log_type="acc", log_location='valid')
-        return self.lr_log, self.loss_log, self.loss_log_val, self.acc_log, self.acc_log_val
+        self.image_log = PokeLog(log_name="result_image", log_type="image", log_location='valid')
+        return self.lr_log, self.loss_log, self.loss_log_val, self.acc_log, self.acc_log_val, self.image_log
 
     # 必须：实现单步训练逻辑，返回一个 dict 的指标
     def train_step(self, batch_idx, batch):
@@ -66,6 +72,8 @@ class SimpleClassifierModule(BaseTrainModule):
 
         self.loss_log_val.set_step(loss.item())
         self.acc_log_val.set_step(acc)
+        if batch_idx % 30 == 0:
+            self.image_log.set_step([torch.randn(50, 3, 224, 224).to(self.device)])
 
     def configure_parameters_save(self):
         self.set_parameters_save(model=self.net, indicator=self.loss_log,

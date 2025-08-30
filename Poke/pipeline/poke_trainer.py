@@ -13,7 +13,15 @@ import logging
 import platform
 from pathlib import Path
 from .utils import set_seed
+import matplotlib.pyplot as plt
+from . import globals as G
 
+time = datetime.now()
+DATE_TIME = time.strftime('%Y%m%d%H')
+INSTALLATION_INFO = platform.machine() + '_' + platform.system()
+
+LOG_ROOT = 'logs/{}_{}'.format(DATE_TIME, INSTALLATION_INFO)
+G.set_log_root(LOG_ROOT, create=True)
 
 # ========== 基础训练模块 ==========
 class BaseTrainModule:
@@ -74,6 +82,9 @@ class BaseTrainModule:
     def set_scheduler(self):
         pass
 
+    def visualization(self):
+        pass
+
 
     def save_parameters(self):
         for item in self.parameter_save_config:
@@ -103,15 +114,10 @@ class PokeTrainer:
         self.valid_loader: Optional[DataLoader] = None
 
 
-        time = datetime.now()
-        DATE_TIME = time.strftime('%Y%m%d%H')
-        INSTALLATION_INFO = platform.machine() + '_' + platform.system()
-
-        self.log_root = 'logs/{}_{}'.format(DATE_TIME, INSTALLATION_INFO)
-        if os.path.exists(self.log_root):
-            shutil.rmtree(self.log_root)
-        os.makedirs(self.log_root, exist_ok=True)
-        log_file = os.path.join(self.log_root, "summary.log")
+        if os.path.exists(LOG_ROOT):
+            shutil.rmtree(LOG_ROOT)
+        os.makedirs(LOG_ROOT, exist_ok=True)
+        log_file = os.path.join(LOG_ROOT, "summary.log")
 
         with open(log_file, 'w'):
             pass
@@ -210,8 +216,18 @@ class PokeTrainer:
 
             log_str = f'Epoch {epoch+1}/{self.epochs}: '
             for item in self.train_module.logs:
-                item.commit_epoch()
-                log_str += item.last_epoch_summary(log=True)
+                if item.log_type != 'image':
+                    item.commit_epoch()
+                    log_str += item.last_epoch_summary(log=True)
+                else:
+                    image_logs = item.get_buffer_image()
+                    for image_idx, image_box in enumerate(image_logs):
+                        fig = self.train_module.visualization(image_box)
+                        save_path = '{}/epoch_{}_{}.png'.format(LOG_ROOT, epoch + 1, image_idx + 1)
+                        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+                        plt.close(fig)
+                        print('Visualization results saved to {}'.format(save_path))
+                    item.commit_epoch()
 
             self.train_module.save_parameters()
             self.train_module.set_scheduler()
