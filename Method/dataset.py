@@ -1,3 +1,5 @@
+import random
+
 from torch.utils.data import Dataset
 import torch
 class RandomClsDataset(Dataset):
@@ -10,4 +12,5 @@ class RandomClsDataset(Dataset):
         return self.x.size(0)
 
     def __getitem__(self, idx):
-        return self.x[idx], self.y[idx]
+        self.case_name = f'image_{random.randint(0, 100)}'
+        return self.case_name, self.x[idx], self.y[idx]

@@ -2,8 +2,8 @@ import random
 import torch
 import torch.nn as nn
 
-from Poke.pipeline.poke_trainer import BaseTrainModule, PokeTrainer
-from Poke.pipeline.poke_log import PokeLog
+from Poke.pipeline.trainer import BaseTrainModule, PokeTrainer
+from Poke.pipeline.log import PokeLog
 from model.model_demo import DemoNet
 from dataset import RandomClsDataset
 from visualization import visualization

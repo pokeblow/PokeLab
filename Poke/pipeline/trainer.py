@@ -195,6 +195,7 @@ class PokeTrainer:
 
             pbar = tqdm(self.train_loader, desc=f"Epoch {epoch + 1}/{self.epochs} • train")
             for idx, batch in enumerate(pbar):
+                batch = batch[1:]
                 # 允许 batch 是张量或张量序列
                 if isinstance(batch, (list, tuple)):
                     batch = [t.to(device=device, dtype=torch.float32) for t in batch]
@@ -207,6 +208,7 @@ class PokeTrainer:
             with torch.no_grad():
                 pbar_v = tqdm(self.valid_loader, desc=f"Epoch {epoch + 1}/{self.epochs} • valid")
                 for idx, batch in enumerate(pbar_v):
+                    batch = batch[1:]
                     if isinstance(batch, (list, tuple)):
                         batch = [t.to(device=device, dtype=torch.float32) for t in batch]
                     else:
