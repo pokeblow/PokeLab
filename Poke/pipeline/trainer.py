@@ -23,6 +23,7 @@ INSTALLATION_INFO = platform.machine() + '_' + platform.system()
 LOG_ROOT = 'logs/{}_{}'.format(DATE_TIME, INSTALLATION_INFO)
 G.set_log_root(LOG_ROOT, create=True)
 
+
 # ========== 基础训练模块 ==========
 class BaseTrainModule:
     """
@@ -75,7 +76,7 @@ class BaseTrainModule:
     def set_parameters_save(self, model, indicator, save_path):
         self.parameter_save_config.append({
             'model': model,
-            'indicator': indicator, # PokeLog class
+            'indicator': indicator,  # PokeLog class
             'save_path': save_path,
         })
 
@@ -84,7 +85,6 @@ class BaseTrainModule:
 
     def visualization(self):
         pass
-
 
     def save_parameters(self):
         for item in self.parameter_save_config:
@@ -98,10 +98,12 @@ class BaseTrainModule:
 # ========== 训练器 ==========
 class PokeTrainer:
     def __init__(self, train_module: BaseTrainModule = None,
-                 train_dataset=None, valid_dataset=None):
+                 train_dataset=None, valid_dataset=None, train_sampler=None, valid_sampler=None):
         self.train_module = train_module
         self.train_dataset = train_dataset
         self.valid_dataset = valid_dataset
+        self.train_sampler = train_sampler
+        self.valid_sampler = valid_sampler
 
         # 训练基本配置（可被 configure() 覆盖）
         self.version = ""
@@ -112,7 +114,6 @@ class PokeTrainer:
 
         self.train_loader: Optional[DataLoader] = None
         self.valid_loader: Optional[DataLoader] = None
-
 
         if os.path.exists(LOG_ROOT):
             shutil.rmtree(LOG_ROOT)
@@ -132,21 +133,35 @@ class PokeTrainer:
 
     # --------- DataLoader ----------
     def _build_loaders(self) -> None:
+        if self.train_sampler is not None:
+            shuffle = False
+            train_sampler = self.train_sampler
+        else:
+            shuffle = True
+            sampler = None
         if self.train_dataset is not None:
             self.train_loader = DataLoader(
                 dataset=self.train_dataset,
                 batch_size=self.batch_size,
-                shuffle=True,
+                shuffle=shuffle,
                 drop_last=True,
                 num_workers=self.num_workers,
+                sampler=train_sampler
             )
+        if self.valid_sampler is not None:
+            shuffle = False
+            valid_sampler = self.valid_sampler
+        else:
+            shuffle = True
+            sampler = None
         if self.valid_dataset is not None:
             self.valid_loader = DataLoader(
                 dataset=self.valid_dataset,
                 batch_size=self.batch_size,
-                shuffle=False,
+                shuffle=shuffle,
                 drop_last=False,
                 num_workers=self.num_workers,
+                sampler=valid_sampler
             )
 
     # --------- 配置 ----------
@@ -216,7 +231,7 @@ class PokeTrainer:
 
                     self.train_module.valid_step(idx, batch)
 
-            log_str = f'Epoch {epoch+1}/{self.epochs}: '
+            log_str = f'Epoch {epoch + 1}/{self.epochs}: '
             for item in self.train_module.logs:
                 if item.log_type != 'image':
                     item.commit_epoch()
@@ -236,4 +251,43 @@ class PokeTrainer:
             print(log_str)
 
             self.logger.info(log_str)
+
+    def fit_valid(self) -> None:
+        if self.train_loader is None and self.valid_loader is None:
+            self._build_loaders()
+
+        device = self.train_module.device  # 与模块保持一致
+
+        # ---------------- Train ----------------
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_str = (f"[{now}] version={self.version} | epochs={self.epochs} | "
+                   f"batch_size={self.batch_size} | train_batches={len(self.train_loader)} | "
+                   f"valid_batches={len(self.valid_loader)}")
+        print(log_str)
+        epoch = 0
+
+        with torch.no_grad():
+            pbar_v = tqdm(self.valid_loader, desc=f"Epoch {epoch + 1}/{self.epochs} • valid")
+            for idx, batch in enumerate(pbar_v):
+                batch = batch[1:]
+                if isinstance(batch, (list, tuple)):
+                    batch = [t.to(device=device, dtype=torch.float32) for t in batch]
+                else:
+                    batch = batch.to(device=device, dtype=torch.float32)
+
+                self.train_module.valid_step(idx, batch)
+
+        for item in self.train_module.logs:
+            if item.log_type != 'image':
+                item.commit_epoch()
+            else:
+                image_logs = item.get_buffer_image()
+                for image_idx, image_box in enumerate(image_logs):
+                    fig = self.train_module.visualization(image_box)
+                    save_path = '{}/epoch_{}_{}.png'.format(LOG_ROOT, epoch, image_idx + 1)
+                    fig.savefig(save_path, dpi=300, bbox_inches="tight")
+                    plt.close(fig)
+                    print('Visualization results saved to {}'.format(save_path))
+                item.commit_epoch()
 
