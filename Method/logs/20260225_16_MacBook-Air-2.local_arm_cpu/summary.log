@@ -1,0 +1,12 @@
+# summary.log created at 2026-02-25 16:31:30
+[2026-02-25 16:31:30] Epoch 1/50: train: lr • train = 0.0010, loss • train = 1.1244, acc • train = 0.3233,  | valid: loss • valid = 1.1150, acc • valid = 0.3267, 
+[2026-02-25 16:31:30] Epoch 2/50: train: lr • train = 0.0010, loss • train = 1.0985, acc • train = 0.3483,  | valid: loss • valid = 1.1050, acc • valid = 0.3000, 
+[2026-02-25 16:31:30] Epoch 3/50: train: lr • train = 0.0005, loss • train = 1.0911, acc • train = 0.3650,  | valid: loss • valid = 1.1053, acc • valid = 0.3167, 
+[2026-02-25 16:31:31] Epoch 4/50: train: lr • train = 0.0005, loss • train = 1.0883, acc • train = 0.3692,  | valid: loss • valid = 1.1059, acc • valid = 0.3167, 
+[2026-02-25 16:31:31] Epoch 5/50: train: lr • train = 0.0003, loss • train = 1.0854, acc • train = 0.3725,  | valid: loss • valid = 1.1064, acc • valid = 0.3233, 
+[2026-02-25 16:31:31] Epoch 6/50: train: lr • train = 0.0003, loss • train = 1.0841, acc • train = 0.3833,  | valid: loss • valid = 1.1071, acc • valid = 0.3200, 
+[2026-02-25 16:31:31] Epoch 7/50: train: lr • train = 0.0001, loss • train = 1.0829, acc • train = 0.3842,  | valid: loss • valid = 1.1071, acc • valid = 0.3267, 
+[2026-02-25 16:31:31] Epoch 8/50: train: lr • train = 0.0001, loss • train = 1.0823, acc • train = 0.3867,  | valid: loss • valid = 1.1072, acc • valid = 0.3267, 
+[2026-02-25 16:31:31] Epoch 9/50: train: lr • train = 0.0001, loss • train = 1.0816, acc • train = 0.3900,  | valid: loss • valid = 1.1073, acc • valid = 0.3300, 
+[2026-02-25 16:31:32] Epoch 10/50: train: lr • train = 0.0001, loss • train = 1.0813, acc • train = 0.3900,  | valid: loss • valid = 1.1074, acc • valid = 0.3333, 
+[2026-02-25 16:31:32] Epoch 11/50: train: lr • train = 0.0000, loss • train = 1.0810, acc • train = 0.3900,  | valid: loss • valid = 1.1075, acc • valid = 0.3333, 

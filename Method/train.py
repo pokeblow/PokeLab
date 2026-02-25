@@ -2,18 +2,17 @@ import random
 import torch
 import torch.nn as nn
 
-from Poke.pipeline.trainer import BaseTrainModule, PokeTrainer
-from Poke.pipeline.log import PokeLog
+from Poke.pipeline import PokeBaseModule, PokeLog, PokeBaseDataloader, PokeTrainer, PokeConfig
 from model.model_demo import DemoNet
 from dataset import RandomClsDataset
 from visualization import visualization
 
-
-# ---- 继承与重写 BaseTrainModule ----
-class SimpleClassifierModule(BaseTrainModule):
-    def __init__(self, config_path: str = ""):
-        super().__init__(config_path=config_path)
+# ---- 继承与重写 PokeBaseModule ----
+class SimpleClassifierModule(PokeBaseModule):
+    def __init__(self, config):
+        super().__init__(config=config)
         lr = self.config['model']['lr']
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.net = DemoNet(self.config['model']['in_channels'], self.config['model']['out_channels'])
 
@@ -28,19 +27,17 @@ class SimpleClassifierModule(BaseTrainModule):
         return visualization(image_box)
 
     def configure_logs(self):
-        self.lr_log = PokeLog(log_name="lr", log_type="lr", log_location='all')
-        self.loss_log = PokeLog(log_name="loss", log_type="loss", log_location='train')
-        self.loss_log_val = PokeLog(log_name="loss", log_type="loss", log_location='valid')
-        self.acc_log = PokeLog(log_name="acc", log_type="acc", log_location='train')
-        self.acc_log_val = PokeLog(log_name="acc", log_type="acc", log_location='valid')
-        self.image_log = PokeLog(log_name="result_image", log_type="image", log_location='valid')
-        return self.lr_log, self.loss_log, self.loss_log_val, self.acc_log, self.acc_log_val, self.image_log
+        self.log_lr = PokeLog(log_name="lr", log_type="lr", log_location='all')
+        self.log_loss = PokeLog(log_name="loss", log_type="loss", log_location='all')
+        self.log_acc = PokeLog(log_name="acc", log_type="acc", log_location='all')
+        self.log_image = PokeLog(log_name="result_image", log_type="image", log_location='valid')
+        return self.log_lr, self.log_loss, self.log_acc, self.log_image
 
     # 必须：实现单步训练逻辑，返回一个 dict 的指标
     def train_step(self, batch_idx, batch):
         self.net.train()
 
-        self.lr_log.set_step(self.optimizer.state_dict()['param_groups'][0]['lr'])
+        self.log_lr.train.set_step(self.optimizer.state_dict()['param_groups'][0]['lr'])
         x, y = batch
         x = x.to(self.device, dtype=torch.float32)
         y = y.to(self.device, dtype=torch.long)
@@ -55,8 +52,8 @@ class SimpleClassifierModule(BaseTrainModule):
         with torch.no_grad():
             pred = logits.argmax(dim=1)
             acc = (pred == y).float().mean().item()
-        self.loss_log.set_step(loss.item())
-        self.acc_log.set_step(acc)
+        self.log_loss.train.set_step(loss.item())
+        self.log_acc.train.set_step(acc)
 
     @torch.no_grad()
     def valid_step(self, batch_idx, batch):
@@ -70,25 +67,41 @@ class SimpleClassifierModule(BaseTrainModule):
         pred = logits.argmax(dim=1)
         acc = (pred == y).float().mean().item()
 
-        self.loss_log_val.set_step(loss.item())
-        self.acc_log_val.set_step(acc)
-        if batch_idx % 30 == 0:
-            self.image_log.set_step([torch.randn(50, 3, 224, 224).to(self.device)])
+        self.log_loss.valid.set_step(loss.item())
+        self.log_acc.valid.set_step(acc)
+        if batch_idx % 300 == 0:
+            self.log_image.valid.set_step([torch.randn(50, 3, 224, 224).to(self.device)])
 
-    def configure_parameters_save(self):
-        self.set_parameters_save(model=self.net, indicator=self.loss_log,
-                                 save_path='{}/net_{}.pth'.format(self.config['parameter_save_root'], self.config['version']))
-
+    def configure_parameters(self):
+        self.set_parameters(
+            name="net",
+            model=self.net,
+            optimizer=self.optimizer,
+            indicator=self.log_loss,
+            ckpt_dir=f'{self.config['model']['parameter_dir']}/{self.config['version']}',
+            best_path="best.pth",
+            save_every_epochs=5,
+            keep_last_k=3,
+        )
 
 if __name__ == "__main__":
-    # 构造数据集
+    # ===== Build datasets =====
     train_set = RandomClsDataset(n=1200, seed=0)
-    valid_set = RandomClsDataset(n=300,  seed=1)
+    valid_set = RandomClsDataset(n=300, seed=1)
 
-    # 构造模块并给定（或直接从文件加载）配置
-    module = SimpleClassifierModule(config_path='config/demo.yaml')
+    # ===== Load configuration =====
+    config = PokeConfig(path='config/demo.yaml')
 
-    # 训练器
-    trainer = PokeTrainer(train_module=module, train_dataset=train_set, valid_dataset=valid_set)
-    trainer.configure()
+    # ===== Build dataloader =====
+    dataloader = PokeBaseDataloader(config, train_dataset=train_set, valid_dataset=valid_set)
+
+    # ===== Build model module =====
+    module = SimpleClassifierModule(config)
+    # Uncomment to resume training from the latest checkpoint
+    # module.load_latest('/Users/wanghaolin/GitHub/PokeLab/Method/parameters/demo/latest.ckpt', continue_epoch=True)
+
+    # ===== Build trainer =====
+    trainer = PokeTrainer(config=config, train_module=module, train_loader=dataloader.train_loader, valid_loader=dataloader.valid_loader)
+
+    # ===== Start training =====
     trainer.fit()

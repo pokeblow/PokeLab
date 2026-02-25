@@ -1,10 +1,15 @@
 version: 'demo'
 
-batch_size: 50
-epochs: 50
-parameter_save_root: 'parameters'
-check_point: False
-seed: 42
+dataloader:
+  size: 1
+  num_workers: 0
+
+run:
+  batch_size: 50
+  epochs: 50
+  parameter_save_root: 'parameters'
+  check_point: False
+  seed: 42
 
 model:
   lr: 0.001
@@ -12,5 +17,6 @@ model:
   in_channels: 20
   out_channels: 3
   drop_rate: 0.2
+  parameter_dir: '/Users/wanghaolin/GitHub/PokeLab/Method/parameters'
 
 
