@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 
 import matplotlib
-matplotlib.use("TkAgg")  # 或 "MacOSX"
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 

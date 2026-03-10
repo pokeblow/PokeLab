@@ -3,12 +3,10 @@ import re
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
 
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator, FormatStrFormatter
-
-import matplotlib
-matplotlib.use("TkAgg")  # 或 "MacOSX"
-import matplotlib.pyplot as plt
 
 from pathlib import Path
 

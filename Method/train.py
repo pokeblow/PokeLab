@@ -1,4 +1,3 @@
-import random
 import torch
 import torch.nn as nn
 
@@ -77,9 +76,8 @@ class SimpleClassifierModule(PokeBaseModule):
             name="net",
             model=self.net,
             optimizer=self.optimizer,
-            indicator=self.log_loss,
-            ckpt_dir=f'{self.config['model']['parameter_dir']}/{self.config['version']}',
-            best_path="best.pth",
+            indicator=self.log_loss.valid,
+            ckpt_dir=f"{self.config['model']['parameter_dir']}/{self.config['version']}",
             save_every_epochs=5,
             keep_last_k=3,
         )
@@ -98,7 +96,7 @@ if __name__ == "__main__":
     # ===== Build model module =====
     module = SimpleClassifierModule(config)
     # Uncomment to resume training from the latest checkpoint
-    # module.load_latest('/Users/wanghaolin/GitHub/PokeLab/Method/parameters/demo/latest.ckpt', continue_epoch=True)
+    # module.load_latest('/Users/wanghaolin/GitHub/PokeLab/Method/parameters/demo/net_latest.ckpt', continue_epoch=True)
 
     # ===== Build trainer =====
     trainer = PokeTrainer(config=config, train_module=module, train_loader=dataloader.train_loader, valid_loader=dataloader.valid_loader)

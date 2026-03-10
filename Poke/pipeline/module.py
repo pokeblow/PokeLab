@@ -6,9 +6,11 @@ import glob
 import time
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any
-from .utils import *
+from pathlib import Path
 
 import torch
+
+from .utils import *  # keep your project utils
 from .log import PokeLog
 from .configure import PokeConfig
 
@@ -17,7 +19,6 @@ from .configure import PokeConfig
 # utils
 # -----------------------
 def _unwrap_model(m: torch.nn.Module) -> torch.nn.Module:
-    # DataParallel / DDP
     return m.module if hasattr(m, "module") else m
 
 
@@ -33,11 +34,14 @@ def _atomic_torch_save(obj: Any, path: str) -> None:
     os.replace(tmp, path)
 
 
-def _cleanup_epoch_ckpts(ckpt_dir: str, keep_last_k: int) -> None:
-    """删除旧的 epoch_*.ckpt，只保留最近 keep_last_k 个"""
+def _cleanup_epoch_ckpts_by_name(ckpt_dir: str, name: str, keep_last_k: int) -> None:
+    """
+    删除旧的 {name}_checkpoint_epoch_*.ckpt，只保留最近 keep_last_k 个
+    """
     if keep_last_k <= 0:
         return
-    paths = sorted(glob.glob(os.path.join(ckpt_dir, "epoch_*.ckpt")))
+    pattern = os.path.join(ckpt_dir, f"{name}_checkpoint_epoch_*.ckpt")
+    paths = sorted(glob.glob(pattern))
     if len(paths) <= keep_last_k:
         return
     for p in paths[: len(paths) - keep_last_k]:
@@ -61,17 +65,17 @@ class ParameterConfig:
     optimizer: Optional[torch.optim.Optimizer] = None
     scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None
 
-    # ✅ 明确就是 PokeLog 实例（或 None）
     indicator: Optional[PokeLog] = None
 
-    best_path: str = ""
     ckpt_dir: str = ""
     save_checkpoint: bool = True
 
-    save_every_epochs: int = 1  # 1=每个epoch都存；0=不存 epoch_*.ckpt
+    save_every_epochs: int = 1
     keep_last_k: int = 5
+    best_mode: str = "min"
 
-    best_mode: str = "min"  # 当前实现里仍采用 “current == best” 判定
+    # 可选：允许你自定义 best 的后缀（默认 .pth）
+    best_ext: str = ".pth"
 
 
 # -----------------------
@@ -79,18 +83,17 @@ class ParameterConfig:
 # -----------------------
 class PokeBaseModule:
     """
-    epoch checkpoint 方案：
-    - latest.ckpt：每次 save_parameters() 覆盖写（断点续训）
-    - epoch_XXXXXXXX.ckpt：按 epoch 周期写（完整训练态）
-    - best.pth：当 indicator 判定为 best 时，只保存权重
+    ✅ 文件名统一定位为：
+    - {name}_latest.ckpt：每次 save_parameters() 覆盖写（断点续训用，完整训练态）
+    - {name}_checkpoint_epoch_XXXXXXXX.ckpt：按 epoch 周期写（完整训练态）
+    - {name}_best.pth：当 indicator 判定为 best 时，只保存权重（state_dict）
 
-    多网络：items[name] 做隔离，不互相覆盖。
+    多网络：每个 item[name] 独立写文件，不互相覆盖。
     """
 
     def __init__(self, config: Optional[PokeConfig] = None):
         self.epoch: int = 0
         self.global_step: int = 0
-
         self.config = config
 
         self.logs = self._init_default_logs()
@@ -102,8 +105,7 @@ class PokeBaseModule:
     def _init_default_logs(self) -> None:
         if not isinstance(self.configure_logs(), tuple):
             return (self.configure_logs(),)
-        else:
-            return self.configure_logs()
+        return self.configure_logs()
 
     def configure_parameters(self):
         raise NotImplementedError
@@ -117,13 +119,13 @@ class PokeBaseModule:
         model: torch.nn.Module,
         optimizer: Optional[torch.optim.Optimizer] = None,
         scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
-        indicator: Optional[Log] = None,   # ✅ 修正：默认 None
-        best_path: str = "",
+        indicator: Optional[PokeLog] = None,
         ckpt_dir: str = "",
         save_checkpoint: bool = True,
         save_every_epochs: int = 1,
         keep_last_k: int = 5,
         best_mode: str = "min",
+        best_ext: str = ".pth",
     ) -> None:
         self.parameters_config.append(
             ParameterConfig(
@@ -132,12 +134,12 @@ class PokeBaseModule:
                 optimizer=optimizer,
                 scheduler=scheduler,
                 indicator=indicator,
-                best_path=best_path,
                 ckpt_dir=ckpt_dir,
                 save_checkpoint=save_checkpoint,
                 save_every_epochs=int(save_every_epochs),
                 keep_last_k=int(keep_last_k),
                 best_mode=best_mode,
+                best_ext=best_ext,
             )
         )
 
@@ -149,41 +151,56 @@ class PokeBaseModule:
         if ind is None:
             return False
 
-        # NaN 防护（空 epoch 会产生 NaN）
         cur = getattr(ind, "current_epoch_means", None)
-        best = getattr(ind, "best_epoch_means", None)
-        if cur is None or best is None:
+        history = getattr(ind, "epoch_means", None)
+        if cur is None or history is None:
             return False
         if isinstance(cur, float) and _is_nan(cur):
             return False
-        if isinstance(best, float) and _is_nan(best):
+
+        valid_history = [v for v in history if not (isinstance(v, float) and _is_nan(v))]
+        if not valid_history:
             return False
 
-        return cur == best
+        mode = (item.best_mode or "min").lower()
+        if mode == "max":
+            return cur == max(valid_history)
+        return cur == min(valid_history)
 
     # -----------------------
-    # internal: pack ckpt (multi-items)
+    # internal: per-item ckpt paths (prefix with name)
     # -----------------------
-    def _pack_checkpoint_all(self) -> Dict[str, Any]:
-        items: Dict[str, Any] = {}
-        for item in self.parameters_config:
-            if not item.save_checkpoint:
-                continue
+    def _ckpt_paths(self, item: ParameterConfig) -> Dict[str, str]:
+        if not item.ckpt_dir:
+            return {"latest": "", "checkpoint": "", "best": ""}
 
-            m = _unwrap_model(item.model)
-            items[item.name] = {
-                "model": m.state_dict(),
-                "optimizer": item.optimizer.state_dict() if item.optimizer is not None else None,
-                "scheduler": item.scheduler.state_dict() if item.scheduler is not None else None,
-                "indicator": item.indicator.state_dict() if item.indicator is not None else None,
-            }
+        _ensure_dir(item.ckpt_dir)
+
+        # ✅ name_latest, name_best, name_checkpoint...
+        latest = os.path.join(item.ckpt_dir, f"{item.name}_latest.ckpt")
+        checkpoint = os.path.join(item.ckpt_dir, f"{item.name}_checkpoint_epoch_{self.epoch:04d}.ckpt")
+        best = os.path.join(item.ckpt_dir, f"{item.name}_best{item.best_ext}")
+
+        return {"latest": latest, "checkpoint": checkpoint, "best": best}
+
+    # -----------------------
+    # internal: pack ckpt (single item)
+    # -----------------------
+    def _pack_checkpoint_one(self, item: ParameterConfig) -> Dict[str, Any]:
+        m = _unwrap_model(item.model)
 
         ckpt: Dict[str, Any] = {
             "meta": {
                 "epoch": int(self.epoch),
                 "global_step": int(self.global_step),
+                "name": item.name,
             },
-            "items": items,
+            "item": {
+                "model": m.state_dict(),
+                "optimizer": item.optimizer.state_dict() if item.optimizer is not None else None,
+                "scheduler": item.scheduler.state_dict() if item.scheduler is not None else None,
+                "indicator": item.indicator.state_dict() if item.indicator is not None else None,
+            },
         }
 
         if self.save_rng_state:
@@ -194,67 +211,50 @@ class PokeBaseModule:
 
         return ckpt
 
-    def _get_ckpt_dir(self) -> str:
-        for item in self.parameters_config:
-            folder_path = Path(item.ckpt_dir)
-            folder_path.mkdir(parents=True, exist_ok=True)
-            if item.save_checkpoint and item.ckpt_dir:
-                return item.ckpt_dir
-        return ""
-
-    def _get_save_every_epochs(self) -> int:
-        vals = [
-            int(it.save_every_epochs)
-            for it in self.parameters_config
-            if it.save_checkpoint and it.save_every_epochs and it.save_every_epochs > 0
-        ]
-        return min(vals) if vals else 0
-
-    def _get_keep_last_k(self) -> int:
-        vals = [int(it.keep_last_k) for it in self.parameters_config if it.save_checkpoint and it.ckpt_dir]
-        return min(vals) if vals else 0
-
     # -----------------------
-    # public: save
+    # public: save (per item)
     # -----------------------
     def save_latest(self) -> None:
-        ckpt_dir = self._get_ckpt_dir()
-        if not ckpt_dir:
-            return
-        _ensure_dir(ckpt_dir)
-        ckpt = self._pack_checkpoint_all()
-        _atomic_torch_save(ckpt, os.path.join(ckpt_dir, "latest.ckpt"))
+        for item in self.parameters_config:
+            if not item.save_checkpoint or not item.ckpt_dir:
+                continue
+            paths = self._ckpt_paths(item)
+            ckpt = self._pack_checkpoint_one(item)
+            _atomic_torch_save(ckpt, paths["latest"])
 
     def save_epoch_checkpoint(self) -> None:
-        ckpt_dir = self._get_ckpt_dir()
-        if not ckpt_dir:
-            return
+        for item in self.parameters_config:
+            if not item.save_checkpoint or not item.ckpt_dir:
+                continue
 
-        save_every = self._get_save_every_epochs()
-        if not save_every:
-            return
+            save_every = int(item.save_every_epochs or 0)
+            if save_every <= 0:
+                continue
+            if (self.epoch % save_every) != 0:
+                continue
 
-        if (self.epoch % save_every) != 0:
-            return
+            paths = self._ckpt_paths(item)
+            ckpt = self._pack_checkpoint_one(item)
+            _atomic_torch_save(ckpt, paths["checkpoint"])
 
-        _ensure_dir(ckpt_dir)
-        ckpt = self._pack_checkpoint_all()
-        epoch_path = os.path.join(ckpt_dir, f"epoch_{self.epoch:08d}.ckpt")
-        _atomic_torch_save(ckpt, epoch_path)
-        _cleanup_epoch_ckpts(ckpt_dir, self._get_keep_last_k())
+            _cleanup_epoch_ckpts_by_name(item.ckpt_dir, item.name, int(item.keep_last_k or 0))
 
     def save_best_weights(self) -> None:
         for item in self.parameters_config:
-            if not item.save_checkpoint:
+            if not item.save_checkpoint or not item.ckpt_dir:
                 continue
-            if item.best_path and self._is_best_now(item):
-                m = _unwrap_model(item.model)
-                print(f'{item.ckpt_dir}/{item.best_path}')
-                _atomic_torch_save(m.state_dict(),  f'{item.ckpt_dir}/{item.best_path}')
+            if not self._is_best_now(item):
+                continue
+
+            paths = self._ckpt_paths(item)
+            m = _unwrap_model(item.model)
+
+            # best 只存权重（state_dict）
+            _atomic_torch_save(m.state_dict(), paths["best"])
 
     def save_parameters(self) -> None:
         """
-        ✅ 建议：仅在 epoch end（log.commit_epoch 之后）调用它
+        建议：仅在 epoch end（log.commit_epoch 之后）调用
         """
         self.save_latest()
         self.save_epoch_checkpoint()
@@ -263,11 +263,18 @@ class PokeBaseModule:
     # -----------------------
     # public: load latest
     # -----------------------
-    def load_latest(self,
-                    ckpt_path: str,
-                    map_location: str | torch.device = "cpu",
-                    strict_model: bool = True,
-                    continue_epoch=True) -> Dict[str, Any]:
+    def load_latest(
+        self,
+        ckpt_path: str,
+        map_location: str | torch.device = "cpu",
+        strict_model: bool = True,
+        continue_epoch: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        ✅ 兼容两种 checkpoint：
+        - 新版 per-item：{"meta":..., "item": {...}}
+        - 旧版 all-in-one：{"meta":..., "items": {...}}
+        """
         if not ckpt_path or (not os.path.isfile(ckpt_path)):
             raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
 
@@ -289,8 +296,34 @@ class PokeBaseModule:
             if torch.cuda.is_available() and rs.get("cuda") is not None:
                 torch.cuda.set_rng_state_all(rs["cuda"])
 
-        items_state: Dict[str, Any] = ckpt.get("items", {})
+        # ✅ per-item
+        if "item" in ckpt:
+            one = ckpt["item"]
+            name_in_ckpt = meta.get("name", None)
 
+            for item in self.parameters_config:
+                if not item.save_checkpoint:
+                    continue
+                if name_in_ckpt is not None and item.name != name_in_ckpt:
+                    continue
+
+                m = _unwrap_model(item.model)
+                if one.get("model") is not None:
+                    m.load_state_dict(one["model"], strict=strict_model)
+
+                if item.optimizer is not None and one.get("optimizer") is not None:
+                    item.optimizer.load_state_dict(one["optimizer"])
+
+                if item.scheduler is not None and one.get("scheduler") is not None:
+                    item.scheduler.load_state_dict(one["scheduler"])
+
+                if item.indicator is not None and one.get("indicator") is not None:
+                    item.indicator.load_state_dict(one["indicator"])
+
+            return ckpt
+
+        # ✅ old all-in-one
+        items_state: Dict[str, Any] = ckpt.get("items", {})
         for item in self.parameters_config:
             if not item.save_checkpoint:
                 continue
@@ -330,91 +363,72 @@ class PokeBaseModule:
     def visualization(self):
         pass
 
+
+# ✅ 兼容你项目里可能引用的名字
+BaseTrainModule = PokeBaseModule
+
+
+# -----------------------
+# minimal test
+# -----------------------
 if __name__ == "__main__":
     import shutil
-    from pathlib import Path
-    import torch
-    import yaml
 
     # -----------------------
     # 0. checkpoint 目录
     # -----------------------
-    ckpt_dir = Path("/Users/wanghaolin/GitHub/PokeLab/Method/logs/_ckpt_test")
+    ckpt_dir = Path("./_ckpt_test")
     if ckpt_dir.exists():
         shutil.rmtree(ckpt_dir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
-    # -----------------------
-    # 1. 生成一个最小 yaml，避免 BaseTrainModule 强制要求 config_path
-    #    （如果你已经允许 config_path=""，这里可以删掉）
-    # -----------------------
-    tmp_yaml = ckpt_dir / "tmp_config.yaml"
-    tmp_yaml.write_text(yaml.safe_dump({"dummy": True}), encoding="utf-8")
-
-    # -----------------------
-    # 2. 实现 MyTrainModule（继承 BaseTrainModule）
-    # -----------------------
     class MyTrainModule(BaseTrainModule):
-        def __init__(self, config_path: str):
-            super().__init__(config_path=config_path)
+        def __init__(self):
+            super().__init__(config=None)
 
-            # 你自己的模型/优化器
             self.model = torch.nn.Linear(4, 1)
             self.optimizer = torch.optim.SGD(self.model.parameters(), lr=0.1)
 
-            # logs / params
             self.loss_log = self.configure_logs()
             self.configure_parameters()
 
         def configure_logs(self) -> PokeLog:
-            # 这里“创建并返回”，同时也会赋给 self.loss_log
             return PokeLog(log_name="loss", log_type="loss", log_location="train")
 
         def configure_parameters(self):
-            # 这里注册 checkpoint 需要保存的对象
             self.set_parameters(
                 name="net",
                 model=self.model,
                 optimizer=self.optimizer,
                 indicator=self.loss_log,
                 ckpt_dir=str(ckpt_dir),
-                best_path=str(ckpt_dir / "best.pth"),
                 save_every_epochs=1,
                 keep_last_k=3,
+                best_ext=".pth",
             )
 
-        # 下面两个函数只是为了符合抽象接口；本测试不会用到
         def train_step(self, batch_idx: int, batch):
             raise NotImplementedError
 
         def valid_step(self, batch_idx: int, batch):
             raise NotImplementedError
 
-    # -----------------------
-    # 3. 训练模拟 + 保存
-    # -----------------------
-    module = MyTrainModule(config_path=str(tmp_yaml))
+    module = MyTrainModule()
 
-    print("Start training simulation with MyTrainModule + log_2.PokeLog ...")
+    print("Start training simulation ...")
     for epoch in range(5):
         module.epoch = epoch
 
-        # fake train steps
         for _ in range(4):
             x = torch.randn(8, 4)
             y = module.model(x).mean()
-
-            # 用 PokeLog 记录 step
             module.loss_log.set_step(float(y.detach()))
 
             y.backward()
             module.optimizer.step()
             module.optimizer.zero_grad()
 
-        # epoch end：聚合并更新 best/current
         module.loss_log.commit_epoch()
-
-        # epoch end 保存（latest + epoch_xxx + best）
         module.save_parameters()
 
         print(
@@ -428,13 +442,10 @@ if __name__ == "__main__":
         if p.is_file():
             print(" ", p.name)
 
-    # -----------------------
-    # 4. 测试断点恢复
-    # -----------------------
-    print("\nReload from latest.ckpt ...")
-    module2 = MyTrainModule(config_path=str(tmp_yaml))
-
-    module2.load_latest(str(ckpt_dir / "latest.ckpt"))
+    # ✅ 注意：latest 文件名现在是 {name}_latest.ckpt
+    print("\nReload from net_latest.ckpt ...")
+    module2 = MyTrainModule()
+    module2.load_latest(str(ckpt_dir / "net_latest.ckpt"))
 
     print(
         f"Restored epoch={module2.epoch}, "

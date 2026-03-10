@@ -1,33 +1,41 @@
+import inspect
+import platform
 import random
+import socket
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
 import numpy as np
 import torch
-from pathlib import Path
 import yaml
-from datetime import datetime
-import platform
-import socket
-import torch
-import inspect
+
 
 def set_seed(seed: int = 42) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
     # 保证确定性（会影响速度）
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
 
-def tensor_to_numpy(tensor: torch.Tensor, batch_idx=0) -> np.ndarray:
-    return tensor.detach().cpu().numpy()[batch_idx]
+def tensor_to_numpy(tensors: Any, batch_idx: int = 0):
+    """
+    支持:
+    - 单个 Tensor -> np.ndarray
+    - list/tuple[Tensor] -> list[np.ndarray]
+    """
+    if torch.is_tensor(tensors):
+        return tensors.detach().cpu().numpy()[batch_idx]
 
-def tensor_to_numpy(tensor_list, batch_idx=0):
-    numpy_list = []
-    for tensor in tensor_list:
-        numpy_list.append(tensor.detach().cpu().numpy()[batch_idx])
-    return numpy_list
+    if isinstance(tensors, (list, tuple)):
+        return [t.detach().cpu().numpy()[batch_idx] for t in tensors]
+
+    raise TypeError(f"Unsupported type for tensor_to_numpy: {type(tensors)}")
 
 
 def load_config(config_path: str) -> dict:
@@ -46,32 +54,24 @@ def load_config(config_path: str) -> dict:
 
 
 def get_run_id():
-    # ===== 时间（到小时）=====
     time_str = datetime.now().strftime("%Y%m%d_%H")
-
-    # ===== 主机名 =====
     host = socket.gethostname()
 
-    # ===== CPU 信息 =====
     cpu = platform.processor()
     if not cpu:
         cpu = platform.machine()
 
-    # ===== GPU 信息 =====
     if torch.cuda.is_available():
         gpu = torch.cuda.get_device_name(0)
         gpu = gpu.replace(" ", "").replace("/", "")
     else:
         gpu = "cpu"
 
-    # ===== 拼接 =====
     run_id = f"{time_str}_{host}_{cpu}_{gpu}"
-
     return run_id
 
 
 def get_caller_file():
-    # 当前帧 -> 上一层 -> 调用者
     frame = inspect.stack()[2]
     caller_path = Path(frame.filename).resolve()
     return caller_path
