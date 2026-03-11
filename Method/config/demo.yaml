@@ -7,7 +7,6 @@ dataloader:
 run:
   batch_size: 50
   epochs: 50
-  parameter_save_root: 'parameters'
   check_point: False
   seed: 42
 

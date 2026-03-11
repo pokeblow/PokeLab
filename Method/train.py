@@ -13,7 +13,7 @@ class SimpleClassifierModule(PokeBaseModule):
         lr = self.config['model']['lr']
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.net = DemoNet(self.config['model']['in_channels'], self.config['model']['out_channels'])
+        self.net = DemoNet(self.config.model.get('in_channels'), self.config.model.get('out_channels'))
 
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = torch.optim.Adam(self.net.parameters(), lr=lr)
@@ -77,7 +77,7 @@ class SimpleClassifierModule(PokeBaseModule):
             model=self.net,
             optimizer=self.optimizer,
             indicator=self.log_loss.valid,
-            ckpt_dir=f"{self.config['model']['parameter_dir']}/{self.config['version']}",
+            ckpt_dir=f"{self.config.model.get('parameter_dir')}/{self.config['version']}",
             save_every_epochs=5,
             keep_last_k=3,
         )
