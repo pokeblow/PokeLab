@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 import torch.distributed as dist
 from torch.utils.data import DataLoader
@@ -12,11 +12,7 @@ from ..configure import PokeConfig
 
 class PokeDDPDataloader(PokeBaseDataloader):
     """
-    DDP-friendly dataloader:
-    - train/valid/test 使用 DistributedSampler
-    - train sampler: shuffle=True
-    - valid/test sampler: shuffle=False（保证评估稳定）
-    - 需要每个 epoch 调用 set_epoch(epoch) 来更新 sampler 的随机种子
+    DDP-friendly dataloader with DistributedSampler support.
     """
 
     def __init__(
@@ -57,6 +53,9 @@ class PokeDDPDataloader(PokeBaseDataloader):
             return None
         return DistributedSampler(dataset, shuffle=shuffle, drop_last=drop_last)
 
+    def _loader_kwargs(self, split: str) -> dict[str, Any]:
+        return {}
+
     def _make_loader(
         self,
         dataset,
@@ -64,6 +63,7 @@ class PokeDDPDataloader(PokeBaseDataloader):
         *,
         shuffle: bool,
         drop_last: bool,
+        split: str,
     ) -> DataLoader | None:
         if dataset is None:
             return None
@@ -71,7 +71,7 @@ class PokeDDPDataloader(PokeBaseDataloader):
         num_workers = self._num_workers()
         loader_shuffle = (sampler is None) and shuffle
 
-        kwargs = dict(
+        kwargs: dict[str, Any] = dict(
             batch_size=self._batch_size(),
             shuffle=loader_shuffle,
             sampler=sampler,
@@ -86,6 +86,7 @@ class PokeDDPDataloader(PokeBaseDataloader):
             if self.prefetch_factor is not None:
                 kwargs["prefetch_factor"] = int(self.prefetch_factor)
 
+        kwargs.update(self._loader_kwargs(split))
         return DataLoader(dataset, **kwargs)
 
     def set_train_dataloader(self) -> DataLoader | None:
@@ -95,6 +96,7 @@ class PokeDDPDataloader(PokeBaseDataloader):
             self.train_sampler,
             shuffle=True,
             drop_last=self.train_drop_last,
+            split="train",
         )
 
     def set_valid_dataloader(self) -> DataLoader | None:
@@ -104,6 +106,7 @@ class PokeDDPDataloader(PokeBaseDataloader):
             self.valid_sampler,
             shuffle=False,
             drop_last=self.eval_drop_last,
+            split="valid",
         )
 
     def set_test_dataloader(self) -> DataLoader | None:
@@ -113,6 +116,7 @@ class PokeDDPDataloader(PokeBaseDataloader):
             self.test_sampler,
             shuffle=False,
             drop_last=self.eval_drop_last,
+            split="test",
         )
 
     def set_epoch(self, epoch: int) -> None:

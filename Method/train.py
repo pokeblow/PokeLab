@@ -82,6 +82,7 @@ class SimpleClassifierModule(PokeBaseModule):
             keep_last_k=3,
         )
 
+
 if __name__ == "__main__":
     # ===== Build datasets =====
     train_set = RandomClsDataset(n=1200, seed=0)
